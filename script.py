@@ -1,16 +1,23 @@
-import pandas as pd
-from sklearn.impute import KNNImputer
-from sklearn.model_selection import train_test_split
-import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, cohen_kappa_score, roc_curve, auc
+
+from sklearn.metrics import roc_curve, auc
 import os
-import matplotlib.pyplot as plt
-import seaborn as sns
 from imblearn.over_sampling import SMOTE
+from sklearn.experimental import enable_halving_search_cv  # noqa
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import RobustScaler
+from collections import Counter
+import numpy as np
+from sklearn.impute import KNNImputer
+from sklearn.experimental import enable_halving_search_cv  # noqa
+from sklearn.model_selection import HalvingGridSearchCV
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import f1_score, classification_report, accuracy_score, cohen_kappa_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, cohen_kappa_score
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-
-
-# Create a directory to save the plots
 if not os.path.exists('plots'):
     os.makedirs('plots')
 
@@ -20,14 +27,11 @@ if not os.path.exists('plots'):
 data = pd.read_csv('data/forestCover.csv')
 
 #downsample data to make it less computationally intensive
-data, _ = train_test_split(data, train_size=0.05, random_state=42, stratify=data['Cover_Type'])
+#data, _ = train_test_split(data, train_size=0.05, random_state=42, stratify=data['Cover_Type'])
 print("Shape of data after downsampling:", data.shape)
 
 #drop "Facet" column because of correlation with "Aspect"
 data = data.drop(columns=['Facet'])
-
-#drop "Water_Level" column because it has cardinality of 1
-#data = data.drop(columns=['Water_Level'])
 
 #drop "Observation_ID" column
 data = data.drop(columns=['Observation_ID'])
@@ -67,13 +71,6 @@ numerical_features.remove('Cover_Type')
 imputer_numerical = KNNImputer(n_neighbors=5)
 data[numerical_features] = imputer_numerical.fit_transform(data[numerical_features])
 
-#the only categorical feature has no missing values
-
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import RobustScaler
-from collections import Counter
-
 X = data.drop('Cover_Type', axis=1)
 y = data['Cover_Type']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
@@ -98,15 +95,6 @@ X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
 X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns)
 
 print("Original training dataset shape %s" % Counter(y_train))
-# Removed the SMOTE resampling. The grid search will now run on the original imbalanced data.
-# Using `weights='distance'` in the grid search effectively applies Shepard's method.
-
-
-from sklearn.experimental import enable_halving_search_cv  # noqa
-from sklearn.model_selection import HalvingGridSearchCV
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import f1_score, classification_report, accuracy_score, cohen_kappa_score
 
 # Definieren des Parameter-Rasters
 param_grid = {
@@ -114,7 +102,7 @@ param_grid = {
     'weights': ['uniform', 'distance'],
     'metric': ['euclidean', 'manhattan']
 }
-n_samples_50_percent = int(0.5 * len(X_train_scaled))
+n_samples_20_percent = int(0.2 * len(X_train_scaled))
 
 halving_search = HalvingGridSearchCV(
     KNeighborsClassifier(),
@@ -126,17 +114,13 @@ halving_search = HalvingGridSearchCV(
     return_train_score=True,
     factor=2,
     random_state=42,
-    max_resources=n_samples_50_percent
+    max_resources=n_samples_20_percent
 )
 halving_search.fit(X_train_scaled, y_train)
 print("Best Parameter:", halving_search.best_params_)
 print("Beste F1-macro Score ):", halving_search.best_score_)
 
 # Visualize CV results in a table
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 cv_results_df = pd.DataFrame(halving_search.cv_results_)
 print("\\n--- HalvingGridSearchCV Cross-Validation Results ---")
 cols_of_interest = [
@@ -165,7 +149,6 @@ for i, metric in enumerate(cv_results_df['param_metric'].unique()):
 
 
 best_knn = halving_search.best_estimator_
-# We must predict on the scaled test data
 y_pred_best = best_knn.predict(X_test_scaled)
 cols_of_interest = [
     'param_n_neighbors', 'param_weights', 'param_metric',
@@ -174,9 +157,6 @@ cols_of_interest = [
 existing_cols = [col for col in cols_of_interest if col in cv_results_df.columns]
 print(cv_results_df[existing_cols].sort_values(by='rank_test_score'))
 
-
-
-# We must predict on the scaled test data
 y_pred_best = best_knn.predict(X_test_scaled)
 
 print('\\n--- Final Evaluation on the test data ---')
@@ -191,14 +171,8 @@ print(classification_report(y_test, y_pred_best))
 
 #------- Classification Tree Approach --------
 
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from collections import Counter
-import numpy as np
-from sklearn.impute import KNNImputer
-
 data_tree = pd.read_csv('data/forestCover.csv')
-data_tree, _ = train_test_split(data_tree, train_size=0.05, random_state=42, stratify=data_tree['Cover_Type'])
+#data_tree, _ = train_test_split(data_tree, train_size=0.05, random_state=42, stratify=data_tree['Cover_Type'])
 
 #drop "Water_Level" column because it has cardinality of 1
 #data_tree = data_tree.drop(columns=['Water_Level'])
@@ -235,8 +209,6 @@ numerical_features.remove('Cover_Type')
 imputer_numerical = KNNImputer(n_neighbors=5)
 data_tree[numerical_features] = imputer_numerical.fit_transform(data_tree[numerical_features])
 
-#we leave categorical features as is
-
 from sklearn.model_selection import train_test_split
 from collections import Counter
 
@@ -244,8 +216,6 @@ print (data_tree.columns.tolist())
 X = data_tree.drop('Cover_Type', axis=1)
 y = data_tree['Cover_Type']
 X_train_tree, X_test_tree, y_train_tree, y_test_tree = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-#no scaling
 
 print("Original training dataset shape %s" % Counter(y_train_tree))
 counts = y_train_tree.value_counts()
@@ -263,12 +233,6 @@ print("Resampled training dataset shape %s" % Counter(y_res_tree))
 
 # Hyperparameter tuning with HalvingGridSearchCV for Decision Tree
 
-from sklearn.experimental import enable_halving_search_cv  # noqa
-from sklearn.model_selection import HalvingGridSearchCV
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import f1_score, classification_report, accuracy_score, cohen_kappa_score
-
-# Define the parameter grid including pre- and post-pruning parameters
 param_grid_tree = {
     'criterion': ['gini', 'entropy'],
     'max_depth': [None ,10, 30],
@@ -277,7 +241,6 @@ param_grid_tree = {
     'ccp_alpha': [0.0, 0.001, 0.01] # Post-pruning
 }
 
-# Instantiate the halving grid search
 halving_search_tree = HalvingGridSearchCV(
     estimator=DecisionTreeClassifier(random_state=42, class_weight='balanced'),
     param_grid=param_grid_tree,
@@ -306,7 +269,6 @@ print('\nClassification Report:')
 print(classification_report(y_test_tree, y_pred_best_tree))
 print(f'\nDepth of the best tree: {best_tree.get_depth()}')
 
-import pandas as pd
 cv_results_tree_df = pd.DataFrame(halving_search_tree.cv_results_)
 print("\n--- HalvingGridSearchCV Cross-Validation Results Table ---")
 cols_of_interest_tree = [
@@ -320,11 +282,6 @@ print(cv_results_tree_df[existing_cols_tree].sort_values(by='rank_test_score'))
 
 
 #------- Comparison --------
-
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, cohen_kappa_score
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 y_pred_knn = best_knn.predict(X_test_scaled)
 y_proba_knn = best_knn.predict_proba(X_test_scaled)
