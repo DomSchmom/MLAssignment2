@@ -3,7 +3,16 @@ from sklearn.impute import KNNImputer
 from sklearn.model_selection import train_test_split
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, cohen_kappa_score, roc_curve, auc
+import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+from imblearn.over_sampling import SMOTE
 
+
+
+# Create a directory to save the plots
+if not os.path.exists('plots'):
+    os.makedirs('plots')
 
 
 #------- kNN Approach --------
@@ -69,6 +78,18 @@ X = data.drop('Cover_Type', axis=1)
 y = data['Cover_Type']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
+print("Original training dataset shape %s" % Counter(y_train))
+counts = y_train.value_counts()
+majority_class = counts.idxmax()
+majority_count = counts.max()
+target_samples = int(majority_count * 0.2)
+
+sampling_strategy = {i: max(count, target_samples) for i, count in counts.items() if i != majority_class}
+
+smote = SMOTE(sampling_strategy=sampling_strategy, random_state=42)
+X_train, y_train = smote.fit_resample(X_train, y_train)
+print("Resampled training dataset shape %s" % Counter(y_train))
+
 scaler = RobustScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
@@ -127,7 +148,7 @@ print(cv_results_df[existing_cols].sort_values(by='rank_test_score'))
 # Visualize CV results in a table
 
 # --- Heatmap Visualization ---
-for metric in cv_results_df['param_metric'].unique():
+for i, metric in enumerate(cv_results_df['param_metric'].unique()):
     metric_df = cv_results_df[cv_results_df['param_metric'] == metric]
     pivot_table = metric_df.pivot_table(
         values='mean_test_score',
@@ -139,7 +160,8 @@ for metric in cv_results_df['param_metric'].unique():
     plt.title(f'Heatmap of Grid Search Results (metric={metric})')
     plt.xlabel('Weights')
     plt.ylabel('Number of Neighbors (k)')
-    plt.show()
+    plt.savefig(f'plots/knn_grid_search_heatmap_{i}.png')
+    plt.close()
 
 
 best_knn = halving_search.best_estimator_
@@ -190,9 +212,10 @@ data_tree = data_tree.drop(columns=['Observation_ID'])
 #drop "Inclination" column because of only noisy values
 data_tree = data_tree.drop(columns=['Inclination'])
 
-stratify_col = data_tree['Cover_Type'].copy()
-if stratify_col.isnull().any():
-    stratify_col.fillna(stratify_col.mode()[0], inplace=True)
+if data['Cover_Type'].isnull().any():
+    print("Imputing missing values in target variable 'Cover_Type' with the mode.")
+    cover_type_mode = data['Cover_Type'].mode()[0]
+    data['Cover_Type'].fillna(cover_type_mode, inplace=True)
 
 data_tree.replace('?', np.nan, inplace=True)
 
@@ -215,9 +238,6 @@ data_tree[numerical_features] = imputer_numerical.fit_transform(data_tree[numeri
 #we leave categorical features as is
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from imblearn.over_sampling import SMOTE
-from imblearn.combine import SMOTETomek
 from collections import Counter
 
 print (data_tree.columns.tolist())
@@ -335,7 +355,8 @@ metrics_df = pd.DataFrame({'kNN': knn_metrics, 'Decision Tree': tree_metrics})
 plt.figure(figsize=(10, 6))
 sns.heatmap(metrics_df, annot=True, fmt=".4f", cmap="coolwarm")
 plt.title('Model Comparison: Performance Metrics')
-plt.show()
+plt.savefig('plots/model_comparison_heatmap.png')
+plt.close()
 
 
 # --- ROC Curve for kNN ---
@@ -352,7 +373,8 @@ plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('ROC Curve for kNN')
 plt.legend(loc="lower right")
-plt.show()
+plt.savefig('plots/knn_roc_curve.png')
+plt.close()
 
 # --- ROC Curve for Decision Tree ---
 plt.figure(figsize=(10, 8))
@@ -368,5 +390,5 @@ plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('ROC Curve for Decision Tree')
 plt.legend(loc="lower right")
-plt.show()
-
+plt.savefig('plots/decision_tree_roc_curve.png')
+plt.close()
