@@ -2,6 +2,8 @@ import pandas as pd
 from sklearn.impute import KNNImputer
 from sklearn.model_selection import train_test_split
 import numpy as np
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, cohen_kappa_score, roc_curve, auc
+
 
 
 #------- kNN Approach --------
@@ -131,7 +133,7 @@ for metric in cv_results_df['param_metric'].unique():
         columns='param_weights'
     )
     plt.figure(figsize=(8, 6))
-    sns.heatmap(pivot_table, annot=True, fmt=".4f", cmap="viridis", cbar_kws={'label': 'F1 Macro Score'})
+    sns.heatmap(pivot_table, annot=True, fmt=".4f", cmap="coolwarm", cbar_kws={'label': 'F1 Macro Score'})
     plt.title(f'Heatmap of Grid Search Results (metric={metric})')
     plt.xlabel('Weights')
     plt.ylabel('Number of Neighbors (k)')
@@ -172,7 +174,7 @@ import numpy as np
 from sklearn.impute import KNNImputer
 
 data_tree = pd.read_csv('data/forestCover.csv')
-data_tree, _ = train_test_split(data_tree, train_size=0.05, random_state=42, stratify=data['Cover_Type'])
+data_tree, _ = train_test_split(data_tree, train_size=0.05, random_state=42, stratify=data_tree['Cover_Type'])
 
 #drop "Water_Level" column because it has cardinality of 1
 #data_tree = data_tree.drop(columns=['Water_Level'])
@@ -331,5 +333,38 @@ metrics_df = pd.DataFrame({'kNN': knn_metrics, 'Decision Tree': tree_metrics})
 plt.figure(figsize=(10, 6))
 sns.heatmap(metrics_df, annot=True, fmt=".4f", cmap="coolwarm")
 plt.title('Model Comparison: Performance Metrics')
+plt.show()
+
+
+# --- ROC Curve for kNN ---
+plt.figure(figsize=(10, 8))
+for i, class_label in enumerate(best_knn.classes_):
+    fpr, tpr, _ = roc_curve(y_test == class_label, y_proba_knn[:, i])
+    roc_auc = auc(fpr, tpr)
+    plt.plot(fpr, tpr, lw=2, label=f'Class {class_label} (AUC = {roc_auc:.2f})')
+
+plt.plot([0, 1], [0, 1], 'k--', lw=2)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve for kNN')
+plt.legend(loc="lower right")
+plt.show()
+
+# --- ROC Curve for Decision Tree ---
+plt.figure(figsize=(10, 8))
+for i, class_label in enumerate(best_tree.classes_):
+    fpr, tpr, _ = roc_curve(y_test_tree == class_label, y_proba_tree[:, i])
+    roc_auc = auc(fpr, tpr)
+    plt.plot(fpr, tpr, lw=2, label=f'Class {class_label} (AUC = {roc_auc:.2f})')
+
+plt.plot([0, 1], [0, 1], 'k--', lw=2)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve for Decision Tree')
+plt.legend(loc="lower right")
 plt.show()
 
