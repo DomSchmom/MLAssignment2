@@ -93,6 +93,7 @@ param_grid = {
     'weights': ['uniform', 'distance'],
     'metric': ['euclidean', 'manhattan']
 }
+n_samples_50_percent = int(0.5 * len(X_train_scaled))
 
 halving_search = HalvingGridSearchCV(
     KNeighborsClassifier(),
@@ -103,7 +104,8 @@ halving_search = HalvingGridSearchCV(
     n_jobs=-1,
     return_train_score=True,
     factor=2,
-    random_state=42
+    random_state=42,
+    max_resources=n_samples_50_percent
 )
 halving_search.fit(X_train_scaled, y_train)
 print("Best Parameter:", halving_search.best_params_)
